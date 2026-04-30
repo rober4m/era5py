@@ -1,5 +1,5 @@
 # ERA-5 Data Downloader
-=====================
+
 Downloads ERA-5 reanalysis data for a single point (lat/lon) over a multi-year period.
 
 Variables downloaded:
@@ -19,8 +19,12 @@ You also need a CDS API key:
   2. Follow https://cds.climate.copernicus.eu/how-to-api
      to create ~/.cdsapirc (or set env vars CDS_URL + CDS_API_KEY)
 
+url: https://cds.climate.copernicus.eu/api
+key: 97828c44-b3cf-493b-9d2c-15739b0601ac
+
 ## Usage
 -----
     python download_era5.py                           # default point & period
     python download_era5.py --lat 40.42 --lon -3.70  # Madrid
-    python download_era5.py --lat 48.85 --lon 2.35 --start 2000 --end 2023
+    python download_era5.py --lat -17.39 --lon -66.16 --start 2000 --end 2025 # Cochabamba
+    python download_era5.py --lat -17.78 --lon -63.18 --start 2024 --end 2025 # SantaCruz
