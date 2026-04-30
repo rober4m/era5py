@@ -1,5 +1,51 @@
+"""
+download_era5.py — ERA 5 Downloader · Post-processor 
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+USER CONFIGURATION  ← Edit this section before running
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
 
+# ── Time ─────────────────────────────────────────────────────────────────────
+YEAR  = 2019        # int  – year  to download  (2003 – 2024)
+
+# ── Variable ──────────────────────────────────────────────────────────────────
+# Choose ONE key from the catalogue below:
+VARIABLE = "2m_temperature"
+        # "2m_temperature",
+        # "2m_dewpoint_temperature",
+        #  "total_precipitation",
+        # "10m_u_component_of_wind",
+        # "10m_v_component_of_wind",
+        # "100m_u_component_of_wind",
+        # "100m_v_component_of_wind",
+# ── Domain mode ──────────────────────────────────────────────────────────────
+# "point"  → download data for a single lat/lon (nearest grid cell)
+# "area"   → download data for a bounding box
+MODE = "area"
+# Point settings (used when MODE = "point")
+LAT =  -16.5    # Latitude  of point
+LON =  -68.15   # Longitude of point
+
+# Area settings (used when MODE = "area")  [N, W, S, E]
+AREA_N =  -8.0
+AREA_W =  -70.0
+AREA_S =  -24.0
+AREA_E =  -57.0
+
+# ── Output ───────────────────────────────────────────────────────────────────
+OUTDIR = "era5_output"   # all files land here
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+ROUGHNESS_LENGTH = 0.03   # m  (open farmland – adjust for your site)
+REF_HEIGHT_LOW   = 10.0   # m  (ERA-5 lowest wind level)
+REF_HEIGHT_HIGH  = 100.0  # m  (ERA-5 highest single-level wind level)
+TARGET_HEIGHTS   = [10, 30, 50]  # m
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Imports
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 import argparse
 import os
 import sys
@@ -9,17 +55,6 @@ import cdsapi
 import numpy as np
 import pandas as pd
 import xarray as xr
-
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-ROUGHNESS_LENGTH = 0.03   # m  (open farmland – adjust for your site)
-REF_HEIGHT_LOW   = 10.0   # m  (ERA-5 lowest wind level)
-REF_HEIGHT_HIGH  = 100.0  # m  (ERA-5 highest single-level wind level)
-TARGET_HEIGHTS   = [10, 30, 50]  # m
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -54,10 +89,10 @@ def build_year_chunks(start: int, end: int, chunk: int = 5):
 # ---------------------------------------------------------------------------
 # CDS download
 # ---------------------------------------------------------------------------
-def download_era5_chunk(client: cdsapi.Client, years: list[int],
-                        lat: float, lon: float, out_path: Path):
+def download_era5_chunk(client: cdsapi.Client, year: int,
+                        lat: float, lon: float, out_path: Path, variable: str):
     """Download one chunk of years from ERA-5 single-levels."""
-    str_years  = [str(y) for y in years]
+    str_years  = [str(year)]
     str_months = [f"{m:02d}" for m in range(1, 13)]
     str_days   = [f"{d:02d}" for d in range(1, 32)]
     str_times  = [f"{h:02d}:00" for h in range(0, 24)]
@@ -68,14 +103,14 @@ def download_era5_chunk(client: cdsapi.Client, years: list[int],
 
     request = {
         "product_type": "reanalysis",
-        "variable": [
-            "2m_temperature",
-            "2m_dewpoint_temperature",
-            "total_precipitation",
-            "10m_u_component_of_wind",
-            "10m_v_component_of_wind",
-            "100m_u_component_of_wind",
-            "100m_v_component_of_wind",
+        "variable": [ variable
+            #"2m_temperature",
+            # "2m_dewpoint_temperature",
+            #  "total_precipitation",
+            # "10m_u_component_of_wind",
+            # "10m_v_component_of_wind",
+            # "100m_u_component_of_wind",
+            # "100m_v_component_of_wind",
         ],
         "year":  str_years,
         "month": str_months,
@@ -85,7 +120,7 @@ def download_era5_chunk(client: cdsapi.Client, years: list[int],
         "format": "netcdf",
     }
 
-    print(f"  Requesting years {years[0]}–{years[-1]} …")
+    print(f"  Requesting year {year} …")
     client.retrieve("reanalysis-era5-single-levels", request, str(out_path))
     print(f"  Saved → {out_path}")
 
@@ -174,27 +209,35 @@ def main():
 
     # ── Download in year chunks ──────────────────────────────────────────────
     client = cdsapi.Client()
-    chunks = build_year_chunks(args.start, args.end, chunk=args.chunk)
+    #chunks = build_year_chunks(args.start, args.end, chunk=args.chunk)
     nc_files: list[Path] = []
+    variable = "2m_temperature"
+    # "2m_temperature",
+    # "2m_dewpoint_temperature",
+    #  "total_precipitation",
+    # "10m_u_component_of_wind",
+    # "10m_v_component_of_wind",
+    # "100m_u_component_of_wind",
+    # "100m_v_component_of_wind",
 
-    for chunk_years in chunks:
-        tag  = f"{chunk_years[0]}-{chunk_years[-1]}"
-        nc_p = out_dir / f"era5_raw_{tag}.nc"
+    for yy in range(1985,2025):
+        tag  = f"_{yy}_{variable}"
+        nc_p = out_dir / f"era5_raw_{tag}_scz.nc"
         if nc_p.exists():
             print(f"  {nc_p.name} already exists – skipping download.")
         else:
-            download_era5_chunk(client, chunk_years, args.lat, args.lon, nc_p)
+            download_era5_chunk(client, yy, args.lat, args.lon, nc_p, variable)
         nc_files.append(nc_p)
 
     # ── Post-process & merge ─────────────────────────────────────────────────
-    print("\nPost-processing downloaded files …")
-    frames: list[pd.DataFrame] = []
-    for nc_p in nc_files:
-        print(f"  Processing {nc_p.name} …")
-        frames.append(process_dataset(nc_p, args.lat, args.lon))
+    # print("\nPost-processing downloaded files …")
+    # frames: list[pd.DataFrame] = []
+    # for nc_p in nc_files:
+    #     print(f"  Processing {nc_p.name} …")
+    #     frames.append(process_dataset(nc_p, args.lat, args.lon))
 
-    df_all = pd.concat(frames).sort_index()
-    df_all = df_all[~df_all.index.duplicated(keep="first")]
+    # df_all = pd.concat(frames).sort_index()
+    # df_all = df_all[~df_all.index.duplicated(keep="first")]
 
     # ── Save outputs ─────────────────────────────────────────────────────────
     csv_path = out_dir / f"era5_point_lat{args.lat}_lon{args.lon}.csv"
