@@ -7,8 +7,9 @@ USER CONFIGURATION  ← Edit this section before running
 """
 
 # ── Time ─────────────────────────────────────────────────────────────────────
-YEAR  = 2019        # int  – year  to download  (2003 – 2024)
-
+YEAR_i  = 2019       # int  – year  to download  (2003 – 2024)
+YEAR_f  = 2020
+NAME = 'bolivia'
 # ── Variable ──────────────────────────────────────────────────────────────────
 # Choose ONE key from the catalogue below:
 VARIABLE = "2m_temperature"
@@ -34,7 +35,7 @@ AREA_S =  -24.0
 AREA_E =  -57.0
 
 # ── Output ───────────────────────────────────────────────────────────────────
-OUTDIR = "era5_output"   # all files land here
+OUTDIR = "era5_output_bolivia"   # all files land here
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -55,6 +56,8 @@ import cdsapi
 import numpy as np
 import pandas as pd
 import xarray as xr
+
+client = cdsapi.Client()
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -85,12 +88,19 @@ def build_year_chunks(start: int, end: int, chunk: int = 5):
     years = list(range(start, end + 1))
     return [years[i:i + chunk] for i in range(0, len(years), chunk)]
 
+def _area_from_config(mode: str) -> list[float]:
+    """Return [N, W, S, E] depending on mode."""
+    if mode == "point":
+        pad = 1.0
+        return [LAT + pad, LON - pad, LAT - pad, LON + pad]
+    else:
+        return [AREA_N, AREA_W, AREA_S, AREA_E]
 
 # ---------------------------------------------------------------------------
 # CDS download
 # ---------------------------------------------------------------------------
-def download_era5_chunk(client: cdsapi.Client, year: int,
-                        lat: float, lon: float, out_path: Path, variable: str):
+def download_era5(client: cdsapi.Client, year: int,
+                        LAT: float, LON: float, OUTDIR: Path, VARIABLE: str, MODE: str):
     """Download one chunk of years from ERA-5 single-levels."""
     str_years  = [str(year)]
     str_months = [f"{m:02d}" for m in range(1, 13)]
@@ -99,11 +109,12 @@ def download_era5_chunk(client: cdsapi.Client, year: int,
 
     # Build a bounding box tight around the requested point
     # (ERA-5 ~0.25° grid; ±0.5° guarantees we get the nearest cell)
-    area = [lat + 0.5, lon - 0.5, lat - 0.5, lon + 0.5]   # N W S E
+    # area = [lat + 0.5, lon - 0.5, lat - 0.5, lon + 0.5]   # N W S E // delete -> not used anymore
+    area   = _area_from_config(MODE)
 
     request = {
         "product_type": "reanalysis",
-        "variable": [ variable
+        "variable": [ VARIABLE
             #"2m_temperature",
             # "2m_dewpoint_temperature",
             #  "total_precipitation",
@@ -121,9 +132,21 @@ def download_era5_chunk(client: cdsapi.Client, year: int,
     }
 
     print(f"  Requesting year {year} …")
-    client.retrieve("reanalysis-era5-single-levels", request, str(out_path))
-    print(f"  Saved → {out_path}")
+    client.retrieve("reanalysis-era5-single-levels", request, str(OUTDIR))
+    print(f"  Saved → {OUTDIR}")
 
+def download():
+    outdir = Path(OUTDIR)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    for yy in range(YEAR_i, YEAR_f):
+        tag  = f"_{yy}_{VARIABLE}_{NAME}"
+        nc_p = outdir / f"era5_raw_{tag}.nc"
+        if nc_p.exists():
+            print(f"  {nc_p.name} already exists – skipping download.")
+        else:
+            download_era5(client, yy, LAT, LON, nc_p, VARIABLE, MODE)
+        nc_files.append(nc_p)
 
 # ---------------------------------------------------------------------------
 # Post-processing
@@ -174,34 +197,36 @@ def process_dataset(nc_path: Path, lat: float, lon: float) -> pd.DataFrame:
     return df
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# CLI entry point
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OPERATIONS = {
+    "download":      download,
+}
 def main():
     parser = argparse.ArgumentParser(
-        description="Download ERA-5 hourly data for a lat/lon point.")
-    parser.add_argument("--lat",   type=float, default=51.5,
-                        help="Latitude  (default: 51.5 – London)")
-    parser.add_argument("--lon",   type=float, default=-0.12,
-                        help="Longitude (default: -0.12 – London)")
-    parser.add_argument("--start", type=int,   default=2010,
-                        help="First year (default: 2010)")
-    parser.add_argument("--end",   type=int,   default=2023,
-                        help="Last year  (default: 2023)")
-    parser.add_argument("--outdir", type=str,  default="era5_output",
-                        help="Output directory (default: era5_output)")
-    parser.add_argument("--chunk", type=int,   default=5,
-                        help="Years per CDS request chunk (default: 5)")
+        description="Download ERA-5 hourly data for a lat/lon point or area.")
+
+    parser.add_argument(
+        "-o", "--operation",
+        required=True,
+        choices=["download", "postprocess", "visualize", "all"],
+        help="Operation to run")
+
     args = parser.parse_args()
 
-    if args.end - args.start < 9:
-        print("WARNING: period is shorter than 10 years. "
-              "Use --start / --end to specify a longer range.")
+    if args.operation == "all":
+        for op_name, op_fn in OPERATIONS.items():
+            op_fn()
+    else:
+        OPERATIONS[args.operation]()
 
-    out_dir = Path(args.outdir)
-    out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\nERA-5 downloader")
+if __name__ == "__main__":
+    main()
+
+"""
+print(f"\nERA-5 downloader")
     print(f"  Point  : lat={args.lat}, lon={args.lon}")
     print(f"  Period : {args.start} – {args.end}  "
           f"({args.end - args.start + 1} years)")
@@ -252,7 +277,4 @@ def main():
     ]
     print(df_all[cols_summary].describe().round(3).to_string())
     print("\nDone ✓")
-
-
-if __name__ == "__main__":
-    main()
+"""
