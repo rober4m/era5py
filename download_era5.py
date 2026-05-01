@@ -7,8 +7,8 @@ USER CONFIGURATION  ← Edit this section before running
 """
 
 # ── Time ─────────────────────────────────────────────────────────────────────
-YEAR_i  = 2019       # int  – year  to download  (2003 – 2024)
-YEAR_f  = 2020
+YEAR_i  = 2020       # int  – year  to download  (2003 – 2024)
+YEAR_f  = 2021
 NAME = 'bolivia'
 # ── Variable ──────────────────────────────────────────────────────────────────
 # Choose ONE key from the catalogue below:
@@ -138,15 +138,17 @@ def download_era5(client: cdsapi.Client, year: int,
 def download():
     outdir = Path(OUTDIR)
     outdir.mkdir(parents=True, exist_ok=True)
+    print(f"\nERA-5 downloader")
+    print(f"  Period : {YEAR_i} – {YEAR_f} ")
+    print(f"  Output : {outdir.resolve()}\n")
 
-    for yy in range(YEAR_i, YEAR_f):
+    for yy in range(YEAR_i, YEAR_f+1):
         tag  = f"_{yy}_{VARIABLE}_{NAME}"
         nc_p = outdir / f"era5_raw_{tag}.nc"
         if nc_p.exists():
             print(f"  {nc_p.name} already exists – skipping download.")
         else:
             download_era5(client, yy, LAT, LON, nc_p, VARIABLE, MODE)
-        nc_files.append(nc_p)
 
 # ---------------------------------------------------------------------------
 # Post-processing
@@ -224,57 +226,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-"""
-print(f"\nERA-5 downloader")
-    print(f"  Point  : lat={args.lat}, lon={args.lon}")
-    print(f"  Period : {args.start} – {args.end}  "
-          f"({args.end - args.start + 1} years)")
-    print(f"  Output : {out_dir.resolve()}\n")
-
-    # ── Download in year chunks ──────────────────────────────────────────────
-    client = cdsapi.Client()
-    #chunks = build_year_chunks(args.start, args.end, chunk=args.chunk)
-    nc_files: list[Path] = []
-    variable = "2m_temperature"
-    # "2m_temperature",
-    # "2m_dewpoint_temperature",
-    #  "total_precipitation",
-    # "10m_u_component_of_wind",
-    # "10m_v_component_of_wind",
-    # "100m_u_component_of_wind",
-    # "100m_v_component_of_wind",
-
-    for yy in range(1985,2025):
-        tag  = f"_{yy}_{variable}"
-        nc_p = out_dir / f"era5_raw_{tag}_scz.nc"
-        if nc_p.exists():
-            print(f"  {nc_p.name} already exists – skipping download.")
-        else:
-            download_era5_chunk(client, yy, args.lat, args.lon, nc_p, variable)
-        nc_files.append(nc_p)
-
-    # ── Post-process & merge ─────────────────────────────────────────────────
-    # print("\nPost-processing downloaded files …")
-    # frames: list[pd.DataFrame] = []
-    # for nc_p in nc_files:
-    #     print(f"  Processing {nc_p.name} …")
-    #     frames.append(process_dataset(nc_p, args.lat, args.lon))
-
-    # df_all = pd.concat(frames).sort_index()
-    # df_all = df_all[~df_all.index.duplicated(keep="first")]
-
-    # ── Save outputs ─────────────────────────────────────────────────────────
-    csv_path = out_dir / f"era5_point_lat{args.lat}_lon{args.lon}.csv"
-    df_all.to_csv(csv_path)
-    print(f"\nMerged CSV saved → {csv_path}")
-
-    # Quick summary
-    print("\n── Summary statistics ──────────────────────────────────────────")
-    cols_summary = [
-        "t2m_C", "specific_humidity_g_kg", "precip_mm",
-        "wind_speed_10m_ms", "wind_speed_30m_ms", "wind_speed_50m_ms",
-    ]
-    print(df_all[cols_summary].describe().round(3).to_string())
-    print("\nDone ✓")
-"""
