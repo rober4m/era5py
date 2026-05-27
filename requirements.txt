@@ -1,0 +1,10 @@
+cdsapi>=0.7
+xarray>=2024.1
+netCDF4>=1.6
+numpy>=1.26
+pandas>=2.2
+polars>=0.20
+PyYAML>=6.0
+tqdm>=4.66
+geopandas>=0.14
+rasterio>=1.3
