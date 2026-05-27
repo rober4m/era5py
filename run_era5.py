@@ -5,7 +5,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-
+from omegaconf import OmegaConf, DictConfig
 import cdsapi
 import yaml
 
@@ -50,34 +50,34 @@ def download(cfg: dict) -> None:
 
 
 def process(cfg: dict) -> None:
-    outdir   = Path(cfg["output_dir"])
-    name     = cfg.get("name", "")
-    variable = cfg["variable"]
-    lat      = cfg["lat"]
-    lon      = cfg["lon"]
+    outdir    = Path(cfg["output_dir"])
+    name      = cfg.get("name", "")
+    variables = list(cfg["variables"])
+    lat       = cfg["lat"]
+    lon       = cfg["lon"]
 
-    nc_files = sorted(outdir.glob(f"era5_raw_*{variable}*{name}*.nc"))
-    if not nc_files:
-        logger.error("No NetCDF files found in %s for variable '%s'.", outdir, variable)
-        sys.exit(1)
+    for variable in variables:
+        nc_files = sorted(outdir.glob(f"era5_raw_*{variable}*{name}*.nc"))
+        if not nc_files:
+            logger.error("No NetCDF files found in %s for variable '%s'.", outdir, variable)
+            sys.exit(1)
 
-    for nc_path in nc_files:
-        logger.info("Processing %s …", nc_path.name)
-        df       = process_dataset(nc_path, lat, lon, cfg)
-        csv_path = nc_path.with_suffix(".csv")
-        df.to_csv(csv_path)
-        logger.info("Saved → %s", csv_path)
+        for nc_path in nc_files:
+            logger.info("Processing %s …", nc_path.name)
+            df       = process_dataset(nc_path, lat, lon, cfg)
+            csv_path = nc_path.with_suffix(".csv")
+            df.to_csv(csv_path)
+            logger.info("Saved → %s", csv_path)
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 def load_config(path: str) -> dict:
-    config_path = Path(path)
+    config_path = Path('etc/') / path
     if not config_path.exists():
-        logger.error("Config file not found: %s", path)
+        logger.error("Config file not found: %s", config_path)
         sys.exit(1)
-    with config_path.open() as fh:
-        return yaml.safe_load(fh)
+    return OmegaConf.load(config_path)
 
 
 OPERATIONS = {
