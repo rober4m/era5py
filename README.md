@@ -2,6 +2,17 @@
 
 Download, post-process and analyse ERA-5 reanalysis data via the CDS API.
 
+## Usage
+
+```bash
+python run_era5.py -o download -c settings_name.yml
+```
+
+`-o` accepts: `download`, `process`, `visualize`, `stats`.  
+`-c` is the filename of your settings file inside `etc/` (e.g. `settings_bolivia.yml`).
+
+Files are saved as `era5_raw_<year>_<variable>_<name>.nc` inside `output_dir`.
+
 ## Variables supported
 
 | Short name | ERA-5 variable |
@@ -79,13 +90,4 @@ area:                 # used when mode = area
 output_dir: era5_output_bolivia
 ```
 
-## Usage
 
-```bash
-python run_era5.py -o download -c settings_name.yml
-```
-
-`-o` accepts: `download`, `process`, `visualize`, `stats`.  
-`-c` is the filename of your settings file inside `etc/` (e.g. `settings_bolivia.yml`).
-
-Files are saved as `era5_raw_<year>_<variable>_<name>.nc` inside `output_dir`.
