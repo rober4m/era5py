@@ -20,11 +20,18 @@ Derived outputs: temperature in °C, precipitation in mm, specific humidity (g k
 ```
 era5py/
 ├── run_era5.py              # Entry point
-├── settings_era5.yml        # User configuration
+├── etc/
+│   └── settings_name.yml   # User configuration files
+├── data/
+│   └── name/               # Downloaded NetCDF files
+├── results/
+│   └── name/               # Processed CSVs and figures
 ├── requirements.txt
 └── src/era5py/
     ├── __init__.py
-    └── download_era5.py     # Download + post-processing functions
+    ├── download_era5.py     # Download functions
+    ├── post_processing.py   # Statistics
+    └── process_era5.py      # Processing and visualisation
 ```
 
 ## Requirements
@@ -47,20 +54,23 @@ key: <YOUR_API_KEY>
 
 ## Configuration
 
-Edit `settings_era5.yml` before running:
+Create a settings file inside `etc/` (use `etc/settings_example.yml` as a template):
 
 ```yaml
 year_start: 2020
 year_end:   2021
 name:       bolivia
 
-variable: "2m_temperature"
-mode:     area            # "point" or "area"
+variables:
+  - 2m_temperature
+  - total_precipitation
 
-lat:  -16.5               # used when mode = point
+mode: area            # "point" or "area"
+
+lat:  -16.5           # used when mode = point
 lon:  -68.15
 
-area:                     # used when mode = area
+area:                 # used when mode = area
   north:  -8.0
   west:  -70.0
   south: -24.0
@@ -72,14 +82,10 @@ output_dir: era5_output_bolivia
 ## Usage
 
 ```bash
-# Download data defined in settings_era5.yml
-python run_era5.py -o download
-
-# Post-process downloaded NetCDF files → CSV
-python run_era5.py -o process
-
-# Use a custom config file
-python run_era5.py -o download -c my_settings.yml
+python run_era5.py -o download -c settings_name.yml
 ```
 
-Files are saved as `era5_raw_<year>_<variable>_<name>.nc` inside `output_dir`. Processed CSVs are written alongside the NetCDF files.
+`-o` accepts: `download`, `process`, `visualize`, `stats`.  
+`-c` is the filename of your settings file inside `etc/` (e.g. `settings_bolivia.yml`).
+
+Files are saved as `era5_raw_<year>_<variable>_<name>.nc` inside `output_dir`.

@@ -10,6 +10,8 @@ import cdsapi
 import yaml
 
 from src.era5py.download_era5 import download_all, process_dataset
+from src.era5py.process_era5 import visualize as _visualize, build_dashboard
+from src.era5py.post_processing import run_stats
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,13 +30,13 @@ def main():
     parser.add_argument(
         "-o", "--operation",
         required=True,
-        choices=["download", "process"],
+        choices=["download", "process", "visualize", "stats"],
         help="Operation to run")
 
     parser.add_argument(
         "-c", "--config",
-        default="settings_era5.yml",
-        help="Path to YAML config file  (default: settings_era5.yml)")
+        required=True,
+        help="Path to YAML config file in etc/ ")
 
     args = parser.parse_args()
 
@@ -47,6 +49,14 @@ def main():
 def download(cfg: dict) -> None:
     client = cdsapi.Client()
     download_all(client, cfg)
+
+
+def visualize(cfg: dict) -> None:
+    _visualize(cfg)
+
+
+def stats(cfg: dict) -> None:
+    run_stats(cfg)
 
 
 def process(cfg: dict) -> None:
@@ -69,6 +79,8 @@ def process(cfg: dict) -> None:
             df.to_csv(csv_path)
             logger.info("Saved → %s", csv_path)
 
+    build_dashboard(cfg)
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -81,8 +93,10 @@ def load_config(path: str) -> dict:
 
 
 OPERATIONS = {
-    "download": download,
-    "process":  process,
+    "download":  download,
+    "process":   process,
+    "visualize": visualize,
+    "stats":     stats,
 }
 
 if __name__ == "__main__":

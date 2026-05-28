@@ -152,11 +152,15 @@ def process_dataset(nc_path: Path, lat: float, lon: float, cfg: dict) -> pd.Data
     if "u10" in ds and "v10" in ds:
         u10 = ds["u10"].values
         v10 = ds["v10"].values
+        df["u10_ms"]            = u10
+        df["v10_ms"]            = v10
         df["wind_speed_10m_ms"] = np.sqrt(u10**2 + v10**2)
     if "u100" in ds and "v100" in ds:
         u100 = ds["u100"].values
         v100 = ds["v100"].values
-        df["wind_speed_100m_ms"] = np.sqrt(u100**2 + v100**2)
+        df["u100_ms"]             = u100
+        df["v100_ms"]             = v100
+        df["wind_speed_100m_ms"]  = np.sqrt(u100**2 + v100**2)
 
     # ── Wind at target heights via log-wind profile ───────────────────────────
     if "u10" in ds and "v10" in ds:
