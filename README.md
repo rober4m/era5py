@@ -1,19 +1,25 @@
-# era5py
+# 🌍 era5py
 
-Download, post-process and analyse ERA-5 reanalysis data via the CDS API.
+> Download, post-process and analyse **ERA-5 reanalysis data** via the CDS API.
 
-## Usage
+---
+
+## 🚀 Usage
 
 ```bash
 python run_era5.py -o download -c settings_name.yml
 ```
 
-`-o` accepts: `download`, `process`, `visualize`, `stats`.  
-`-c` is the filename of your settings file inside `etc/` (e.g. `settings_bolivia.yml`).
+| Flag | Values | Description |
+|------|--------|-------------|
+| `-o` | `download`, `process`, `visualize`, `stats` | Operation to run |
+| `-c` | e.g. `settings_bolivia.yml` | Settings file inside `etc/` |
 
-Files are saved as `era5_raw_<year>_<variable>_<name>.nc` inside `output_dir`.
+> 📁 Files are saved as `era5_raw_<year>_<variable>_<name>.nc` inside `output_dir`.
 
-## Variables supported
+---
+
+## 🌡️ Variables supported
 
 | Short name | ERA-5 variable |
 |---|---|
@@ -24,28 +30,32 @@ Files are saved as `era5_raw_<year>_<variable>_<name>.nc` inside `output_dir`.
 | `u100` / `v100` | 100 m U/V wind components |
 | wind at target heights | Reconstructed via log-wind profile |
 
-Derived outputs: temperature in °C, precipitation in mm, specific humidity (g kg⁻¹), wind speed at 10 / 30 / 50 m.
+✨ **Derived outputs:** temperature in °C, precipitation in mm, specific humidity (g kg⁻¹), wind speed at 10 / 30 / 50 m.
 
-## Project layout
+---
+
+## 📂 Project layout
 
 ```
 era5py/
-├── run_era5.py              # Entry point
+├── run_era5.py              # 🔑 Entry point
 ├── etc/
-│   └── settings_name.yml   # User configuration files
+│   └── settings_name.yml   # ⚙️  User configuration files
 ├── data/
-│   └── name/               # Downloaded NetCDF files
+│   └── name/               # 📥 Downloaded NetCDF files
 ├── results/
-│   └── name/               # Processed CSVs and figures
+│   └── name/               # 📊 Processed CSVs and figures
 ├── requirements.txt
 └── src/era5py/
     ├── __init__.py
-    ├── download_era5.py     # Download functions
-    ├── post_processing.py   # Statistics
-    └── process_era5.py      # Processing and visualisation
+    ├── download_era5.py     # ⬇️  Download functions
+    ├── post_processing.py   # 📈 Statistics
+    └── process_era5.py      # 🔄 Processing and visualisation
 ```
 
-## Requirements
+---
+
+## ⚙️ Requirements
 
 Python 3.12 and:
 
@@ -53,7 +63,7 @@ Python 3.12 and:
 pip install -r requirements.txt
 ```
 
-### CDS API key
+### 🔑 CDS API key
 
 1. Register at <https://cds.climate.copernicus.eu>
 2. Follow the [how-to-api guide](https://cds.climate.copernicus.eu/how-to-api) to create `~/.cdsapirc`:
@@ -63,7 +73,9 @@ url: https://cds.climate.copernicus.eu/api
 key: <YOUR_API_KEY>
 ```
 
-## Configuration
+---
+
+## 🗂️ Configuration
 
 Create a settings file inside `etc/` (use `etc/settings_example.yml` as a template):
 
@@ -86,8 +98,4 @@ area:                 # used when mode = area
   west:  -70.0
   south: -24.0
   east:  -57.0
-
-output_dir: era5_output_bolivia
 ```
-
-
