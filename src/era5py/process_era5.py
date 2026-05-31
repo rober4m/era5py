@@ -4,6 +4,7 @@
 import logging
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -19,6 +20,12 @@ _COLORSCALES: dict[str, str] = {
     "u10":  "RdBu",   "v10":  "RdBu",
     "u100": "RdBu",   "v100": "RdBu",
 }
+
+_WIND_PAIR_MAP: dict[str, str] = {
+    "10m_u_component_of_wind":  "10m_v_component_of_wind",
+    "100m_u_component_of_wind": "100m_v_component_of_wind",
+}
+_WIND_V_VARS: set[str] = set(_WIND_PAIR_MAP.values())
 
 # ---------------------------------------------------------------------------
 # Point: time-series
@@ -61,7 +68,7 @@ def _pick_colorscale(var_name: str) -> str:
 def plot_area_map(nc_path: Path, variable: str, fig_dir: Path,
                   n_frames: int = 48) -> None:
     """Animated Heatmap with a time slider for one gridded ERA-5 variable."""
-    ds = xr.open_dataset(nc_path)
+    ds = xr.open_dataset(nc_path, engine="netcdf4")
     if variable not in ds:
         avail = list(ds.data_vars)
         logger.warning("'%s' not in %s. Available: %s", variable, nc_path.name, avail)
@@ -122,7 +129,7 @@ def plot_area_map(nc_path: Path, variable: str, fig_dir: Path,
 
 def _plot_all_area(nc_files: list[Path], fig_dir: Path) -> None:
     for nc_path in nc_files:
-        ds = xr.open_dataset(nc_path)
+        ds = xr.open_dataset(nc_path, engine="netcdf4")
         for var in ds.data_vars:
             logger.info("Mapping %s / %s …", nc_path.name, var)
             plot_area_map(nc_path, var, fig_dir)
@@ -143,7 +150,8 @@ def visualize(cfg: dict) -> None:
     if mode == "point":
         files = []
         for variable in variables:
-            files.extend(sorted(outdir.glob(f"era5_raw_*{variable}*{name}.csv")))
+            files.extend(sorted(outdir.glob(f"era5_raw_*{variable}*{name}*.csv")))
+            files.extend(sorted(outdir.glob(f"era5_ts_*{variable}*{name}*.csv")))
         if not files:
             logger.error("No CSV files in %s. Run 'process' first.", outdir)
             return
@@ -151,7 +159,8 @@ def visualize(cfg: dict) -> None:
     else:
         files = []
         for variable in variables:
-            files.extend(sorted(outdir.glob(f"era5_raw_*{variable}*{name}.nc")))
+            files.extend(sorted(outdir.glob(f"era5_raw_*{variable}*{name}*.nc")))
+            files.extend(sorted(outdir.glob(f"era5_ts_*{variable}*{name}*.nc")))
         if not files:
             logger.error("No NetCDF files in %s.", outdir)
             return
@@ -165,6 +174,9 @@ def visualize(cfg: dict) -> None:
 # ---------------------------------------------------------------------------
 def _load_all_years(csv_files: list[Path]) -> pd.DataFrame:
     frames = [pd.read_csv(f, index_col="time", parse_dates=True) for f in csv_files]
+    frames = [f for f in frames if not f.empty]
+    if not frames:
+        return pd.DataFrame()
     return pd.concat(frames).sort_index()
 
 
@@ -178,6 +190,9 @@ def _build_variable_dashboard(
     csv_files: list[Path], variable: str, name: str, stem: str, fig_dir: Path
 ) -> None:
     all_data = _load_all_years(csv_files)
+    if all_data.empty or not all_data.select_dtypes(include="number").columns.tolist():
+        logger.warning("No numeric data for '%s'; skipping dashboard.", variable)
+        return
     col      = _primary_col(all_data)
     series   = all_data[col]
 
@@ -203,14 +218,29 @@ def _build_variable_dashboard(
         list(hourly_mean + hourly_std) + list((hourly_mean - hourly_std)[::-1])
     )
 
+    # Summary stats for table
+    start_date = series.index.min().strftime("%Y-%m-%d")
+    end_date   = series.index.max().strftime("%Y-%m-%d")
+    mean_val   = f"{series.mean():.2f}"
+    max_val    = f"{series.max():.2f}"
+    min_val    = f"{series.min():.2f}"
+
     fig = make_subplots(
-        rows=3, cols=1,
+        rows=4, cols=1,
         subplot_titles=[
             "All years – monthly mean ± 1σ",
             "Year 2018",
             "Daily average profile (hour 0–23)",
+            "",
         ],
-        vertical_spacing=0.1,
+        specs=[
+            [{"type": "scatter"}],
+            [{"type": "scatter"}],
+            [{"type": "scatter"}],
+            [{"type": "table"}],
+        ],
+        row_heights=[0.27, 0.27, 0.27, 0.19],
+        vertical_spacing=0.08,
     )
 
     # Row 1 – all-years variability
@@ -247,8 +277,27 @@ def _build_variable_dashboard(
         name="±1σ daily", showlegend=True,
     ), row=3, col=1)
 
+    # Row 4 – summary table
+    fig.add_trace(go.Table(
+        header=dict(
+            values=["Metric", "Value"],
+            fill_color="lightsteelblue",
+            align="left",
+            font=dict(size=12),
+        ),
+        cells=dict(
+            values=[
+                ["Start date", "End date", f"Mean {col}", f"Max {col}", f"Min {col}"],
+                [start_date, end_date, mean_val, max_val, min_val],
+            ],
+            fill_color="white",
+            align="left",
+            font=dict(size=11),
+        ),
+    ), row=4, col=1)
+
     fig.update_layout(
-        height=900,
+        height=1100,
         title_text=f"ERA-5 Summary – {name.upper()}  |  {variable}",
         title_font_size=16,
     )
@@ -264,25 +313,173 @@ def _build_variable_dashboard(
     logger.info("Dashboard saved → %s", out)
 
 
+def _u_v_col_names(u_variable: str) -> tuple[str, str, int]:
+    """Return (u_col, v_col, height_m) for a u-wind variable name."""
+    if "10m_u" in u_variable:
+        return "u10_ms", "v10_ms", 10
+    return "u100_ms", "v100_ms", 100
+
+
+def _find_csv_files(outdir: Path, variable: str, name: str) -> list[Path]:
+    return sorted(
+        f for pattern in (
+            f"era5_raw_*{variable}*{name}*.csv",
+            f"era5_ts_*{variable}*{name}*.csv",
+        )
+        for f in outdir.glob(pattern)
+        if "_stats_" not in f.name and "_uncertainty" not in f.name
+    )
+
+
+def _build_wind_dashboard(
+    u_files: list[Path], v_files: list[Path],
+    u_variable: str, name: str, stem: str, fig_dir: Path,
+) -> None:
+    u_df = _load_all_years(u_files)
+    v_df = _load_all_years(v_files)
+    if u_df.empty or v_df.empty:
+        logger.warning("Missing u or v data for wind dashboard '%s'; skipping.", u_variable)
+        return
+
+    u_col, v_col, height = _u_v_col_names(u_variable)
+    if u_col not in u_df.columns or v_col not in v_df.columns:
+        logger.warning(
+            "Expected columns '%s'/'%s' not found; skipping wind dashboard.", u_col, v_col
+        )
+        return
+
+    u = u_df[u_col]
+    v = v_df[v_col].reindex(u.index)
+
+    speed     = pd.Series(np.sqrt(u.values**2 + v.values**2), index=u.index, name="speed_ms")
+    direction = pd.Series(
+        (np.degrees(np.arctan2(-u.values, -v.values)) + 360) % 360,
+        index=u.index, name="dir_deg",
+    )
+
+    monthly_speed = speed.resample("ME").mean()
+    monthly_dir   = direction.resample("ME").mean()
+    hourly_speed  = speed.groupby(speed.index.hour).mean()
+
+    start_date = speed.index.min().strftime("%Y-%m-%d")
+    end_date   = speed.index.max().strftime("%Y-%m-%d")
+    mean_speed = f"{speed.mean():.2f} m/s"
+    max_speed  = f"{speed.max():.2f} m/s"
+    min_speed  = f"{speed.min():.2f} m/s"
+    mean_dir   = f"{direction.mean():.1f}°"
+
+    fig = make_subplots(
+        rows=4, cols=1,
+        subplot_titles=[
+            f"Monthly mean wind speed ({height} m)",
+            f"Monthly mean wind direction ({height} m)",
+            f"Daily wind speed profile ({height} m, hour 0–23)",
+            "",
+        ],
+        specs=[
+            [{"type": "scatter"}],
+            [{"type": "scatter"}],
+            [{"type": "scatter"}],
+            [{"type": "table"}],
+        ],
+        row_heights=[0.27, 0.27, 0.27, 0.19],
+        vertical_spacing=0.08,
+    )
+
+    fig.add_trace(go.Scatter(
+        x=monthly_speed.index, y=monthly_speed.values,
+        mode="lines+markers", name=f"Speed {height} m",
+        line=dict(color="steelblue", width=1.5),
+    ), row=1, col=1)
+
+    fig.add_trace(go.Scatter(
+        x=monthly_dir.index, y=monthly_dir.values,
+        mode="markers", name=f"Direction {height} m",
+        marker=dict(color="darkorange", size=5),
+    ), row=2, col=1)
+
+    fig.add_trace(go.Scatter(
+        x=list(hourly_speed.index), y=hourly_speed.values,
+        mode="lines+markers", name="Mean speed profile",
+        line=dict(color="seagreen", width=2),
+    ), row=3, col=1)
+
+    fig.add_trace(go.Table(
+        header=dict(
+            values=["Metric", "Value"],
+            fill_color="lightsteelblue",
+            align="left",
+            font=dict(size=12),
+        ),
+        cells=dict(
+            values=[
+                ["Start date", "End date", "Mean speed", "Max speed", "Min speed", "Mean direction"],
+                [start_date, end_date, mean_speed, max_speed, min_speed, mean_dir],
+            ],
+            fill_color="white",
+            align="left",
+            font=dict(size=11),
+        ),
+    ), row=4, col=1)
+
+    fig.update_layout(
+        height=1100,
+        title_text=f"ERA-5 Wind Summary – {name.upper()}  |  {height} m",
+        title_font_size=16,
+    )
+    fig.update_xaxes(title_text="Date",          row=1, col=1)
+    fig.update_xaxes(title_text="Date",          row=2, col=1)
+    fig.update_xaxes(title_text="Hour of day",   row=3, col=1)
+    fig.update_yaxes(title_text="Speed (m/s)",   row=1, col=1)
+    fig.update_yaxes(title_text="Direction (°)", row=2, col=1)
+    fig.update_yaxes(title_text="Speed (m/s)",   row=3, col=1)
+
+    out = fig_dir / f"{stem}.html"
+    fig.write_html(str(out))
+    logger.info("Wind dashboard saved → %s", out)
+
+
 def build_dashboard(cfg: dict) -> None:
-    """Build a 3-panel summary dashboard per variable: all-years, 2018, daily profile."""
+    """Build summary dashboards: combined wind for u/v pairs, generic for all others."""
     outdir    = Path(cfg["output_dir"])
     name      = cfg.get("name", "")
     variables = list(cfg["variables"])
     fig_dir   = Path(cfg.get("results_dir", outdir / "figures"))
     fig_dir.mkdir(parents=True, exist_ok=True)
 
+    variables_set = set(variables)
+    handled: set[str] = set()
+
     for variable in variables:
-        csv_files = sorted(
-            f for f in outdir.glob(f"era5_raw_*{variable}*{name}.csv")
-            if "_stats_" not in f.name and "_uncertainty" not in f.name
-        )
+        if variable in handled:
+            continue
+
+        csv_files = _find_csv_files(outdir, variable, name)
         if not csv_files:
             logger.warning("No CSV files for '%s' – skipping dashboard.", variable)
+            handled.add(variable)
             continue
+
+        if variable in _WIND_PAIR_MAP:
+            v_var   = _WIND_PAIR_MAP[variable]
+            v_files = _find_csv_files(outdir, v_var, name) if v_var in variables_set else []
+            if v_files:
+                _, _, height = _u_v_col_names(variable)
+                stem = f"summary_{name}_wind_{height}m"
+                _build_wind_dashboard(csv_files, v_files, variable, name, stem, fig_dir)
+                handled.add(variable)
+                handled.add(v_var)
+                logger.info("Wind dashboard complete for %d m.", height)
+                continue
+
+        if variable in _WIND_V_VARS:
+            # orphaned v-component without a paired u-component: fall through to generic
+            pass
+
         stem = (
             f"summary_{name}" if len(variables) == 1
             else f"summary_{name}_{variable.replace(' ', '_')}"
         )
         _build_variable_dashboard(csv_files, variable, name, stem, fig_dir)
+        handled.add(variable)
         logger.info("Dashboard complete for '%s'.", variable)

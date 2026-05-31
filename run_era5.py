@@ -67,7 +67,11 @@ def process(cfg: dict) -> None:
     lon       = cfg["lon"]
 
     for variable in variables:
-        nc_files = sorted(outdir.glob(f"era5_raw_*{variable}*{name}*.nc"))
+        nc_files = sorted(
+            outdir.glob(f"era5_raw_*{variable}*{name}*.nc")
+        ) or sorted(
+            outdir.glob(f"era5_ts_*{variable}*{name}*.nc")
+        )
         if not nc_files:
             logger.error("No NetCDF files found in %s for variable '%s'.", outdir, variable)
             sys.exit(1)
@@ -79,6 +83,8 @@ def process(cfg: dict) -> None:
             df.to_csv(csv_path)
             logger.info("Saved → %s", csv_path)
 
+    if cfg.get("mode", "point") == "point":
+        _visualize(cfg)
     build_dashboard(cfg)
 
 # ---------------------------------------------------------------------------

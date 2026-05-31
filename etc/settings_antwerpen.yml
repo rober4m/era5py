@@ -11,10 +11,10 @@
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── Time  (format: DD-MM-YYYY) ───────────────────────────────────────────────
-date_start: 01-01-1980
-date_end:   31-12-2024
-name: code_name
+# ── Time ─────────────────────────────────────────────────────────────────────
+date_start: 01-01-2000
+date_end:   31-12-2025
+name: antwerpen
 
 # ── Variables ─────────────────────────────────────────────────────────────────
 # One or more variables (one CDS request per variable):
@@ -24,7 +24,7 @@ name: code_name
 #   100m_u_component_of_wind           100m_v_component_of_wind
 #   surface_solar_radiation_downwards  surface_net_solar_radiation
 #   skin_temperature
-variables: ["2m_temperature"]
+variables: ["2m_temperature", "10m_u_component_of_wind", "10m_v_component_of_wind"]
 
 # ── Domain mode ──────────────────────────────────────────────────────────────
 # "point"  → nearest grid cell to lat/lon
@@ -32,8 +32,8 @@ variables: ["2m_temperature"]
 mode: point
 
 # Point settings (used when mode = point)
-lat:  -17.78
-lon:  -63.18
+lat:  51.2126
+lon:  4.4146
 
 # Area settings (used when mode = area)  [N, W, S, E]
 area:
@@ -50,8 +50,7 @@ results_dir: results/${name}
 # "cds"        (default) – year-by-year requests via reanalysis-era5-single-levels.
 # "timeseries" – single request per variable via reanalysis-era5-single-levels-timeseries
 #                (ARCO/Zarr backed on CDS; faster for mode=point over long periods).
-#                Falls back to "cds" automatically when mode != point.
-download_backend: cds
+download_backend: timeseries
 download_workers: 4     # parallel CDS jobs (reserved for future use)
 
 # ── Physics constants ─────────────────────────────────────────────────────────
